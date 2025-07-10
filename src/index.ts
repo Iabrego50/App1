@@ -69,6 +69,11 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Server is running' });
 });
 
+// Additional health check at root
+app.get('/health', (req, res) => {
+  res.json({ status: 'OK', message: 'Server is running' });
+});
+
 // API root endpoint
 app.get('/', (req, res) => {
   res.json({ 
