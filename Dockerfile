@@ -2,7 +2,7 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy package files
+# Copy package files first for better caching
 COPY package*.json ./
 COPY server/package*.json ./server/
 COPY client/package*.json ./client/
@@ -18,6 +18,9 @@ RUN npm run build
 
 # Expose port
 EXPOSE 5000
+
+# Set environment variable
+ENV NODE_ENV=production
 
 # Start the application
 CMD ["npm", "start"] 
