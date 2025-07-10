@@ -113,11 +113,15 @@ initializeDatabase()
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
-      console.log(`🌐 Network access: http://0.0.0.0:${PORT}/api/health`);
+      console.log(`📊 Health check: http://localhost:${PORT}/`);
+      console.log(`🌐 Network access: http://0.0.0.0:${PORT}/`);
     });
   })
   .catch((error) => {
     console.error('Failed to initialize database:', error);
-    process.exit(1);
+    // Don't exit immediately, try to start server anyway
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 Server running on port ${PORT} (without database)`);
+      console.log(`📊 Health check: http://localhost:${PORT}/`);
+    });
   }); 
