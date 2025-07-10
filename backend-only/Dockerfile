@@ -1,5 +1,9 @@
 FROM node:18-alpine
 
+# Add build argument to force clean builds
+ARG BUILD_DATE=unknown
+ARG VCS_REF=unknown
+
 WORKDIR /app
 
 # Install system dependencies for canvas and other native modules
@@ -19,7 +23,7 @@ RUN apk add --no-cache \
 COPY package*.json ./
 
 # Install ALL dependencies (including dev dependencies for build)
-RUN npm ci
+RUN npm ci --include=dev
 
 # Copy source code
 COPY src ./src
