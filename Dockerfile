@@ -2,13 +2,11 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy package files first for better caching
+# Copy package files
 COPY package*.json ./
-COPY server/package*.json ./server/
-COPY client/package*.json ./client/
 
 # Install dependencies
-RUN npm run install-all
+RUN npm install
 
 # Copy source code
 COPY . .
