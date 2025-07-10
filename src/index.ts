@@ -31,28 +31,7 @@ app.use(helmet({
   }
 }));
 app.use(cors({
-  origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    // Allow localhost and any IP address on port 3000
-    if (origin.match(/^http:\/\/(localhost|127\.0\.0\.1|\d+\.\d+\.\d+\.\d+):3000$/)) {
-      return callback(null, true);
-    }
-    
-    // Allow Netlify domains
-    if (origin.includes('netlify.app') || origin.includes('netlify.com')) {
-      return callback(null, true);
-    }
-    
-    // In development, also allow any origin for easier testing
-    if (process.env.NODE_ENV !== 'production') {
-      return callback(null, true);
-    }
-    
-    // Reject other origins in production
-    callback(new Error('Not allowed by CORS'));
-  },
+  origin: true, // Allow all origins for now
   credentials: true
 }));
 app.use(express.json());
