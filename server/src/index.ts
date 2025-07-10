@@ -85,6 +85,14 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Server is running' });
 });
 
+// Serve static files from the React app build
+app.use(express.static(path.join(__dirname, '../../client/build')));
+
+// Handle React routing, return all requests to React app
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../../client/build', 'index.html'));
+});
+
 // Initialize database and start server
 initializeDatabase()
   .then(() => {
