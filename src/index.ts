@@ -113,20 +113,19 @@ app.get('*', (req, res) => {
   });
 });
 
-// Initialize database and start server
-initializeDatabase()
-  .then(() => {
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`📊 Health check: http://localhost:${PORT}/`);
-      console.log(`🌐 Network access: http://0.0.0.0:${PORT}/`);
+// Start server immediately, initialize database in background
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
+  console.log(`🌐 Network access: http://0.0.0.0:${PORT}/api/health`);
+  
+  // Initialize database in background
+  initializeDatabase()
+    .then(() => {
+      console.log('✅ Database initialized successfully');
+    })
+    .catch((error) => {
+      console.error('❌ Failed to initialize database:', error);
+      console.log('⚠️ Server running without database');
     });
-  })
-  .catch((error) => {
-    console.error('Failed to initialize database:', error);
-    // Don't exit immediately, try to start server anyway
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 Server running on port ${PORT} (without database)`);
-      console.log(`📊 Health check: http://localhost:${PORT}/`);
-    });
-  }); 
+}); 
