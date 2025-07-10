@@ -16,16 +16,20 @@ RUN apk add --no-cache \
 WORKDIR /app
 
 # Copy package files
-COPY package*.json ./
+COPY server/package*.json ./
 
 # Install dependencies
-RUN npm install
+RUN npm ci --only=production
 
 # Copy source code
-COPY . .
+COPY server/src ./src
+COPY server/tsconfig.json ./
 
 # Build the application
 RUN npm run build
+
+# Create uploads directory
+RUN mkdir -p uploads/images uploads/videos uploads/documents uploads/thumbnails
 
 # Expose port
 EXPOSE 5000
