@@ -3,6 +3,8 @@ FROM node:18-alpine
 # Install build dependencies for canvas
 RUN apk add --no-cache \
     python3 \
+    python3-dev \
+    py3-setuptools \
     make \
     g++ \
     cairo-dev \
