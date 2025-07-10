@@ -16,7 +16,26 @@ import { initializeDatabase } from './database/init';
 dotenv.config();
 
 const app = express();
-const PORT = parseInt(process.env.PORT || '5000', 10);
+
+// Better PORT handling for Railway
+let PORT: number;
+try {
+  const portStr = process.env.PORT || '5000';
+  PORT = parseInt(portStr, 10);
+  
+  // Validate PORT is a valid number
+  if (isNaN(PORT) || PORT < 0 || PORT > 65535) {
+    console.warn(`Invalid PORT value: ${portStr}, using default: 5000`);
+    PORT = 5000;
+  }
+} catch (error) {
+  console.warn('Error parsing PORT, using default: 5000', error);
+  PORT = 5000;
+}
+
+console.log(`🔧 Environment check:`);
+console.log(`   PORT: ${PORT} (from ${process.env.PORT || 'default'})`);
+console.log(`   NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
 
 // Middleware
 app.use(helmet({
@@ -82,7 +101,12 @@ app.use('/api/ai', aiRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', message: 'Server is running' });
+  res.json({ 
+    status: 'OK', 
+    message: 'Server is running',
+    port: PORT,
+    environment: process.env.NODE_ENV || 'development'
+  });
 });
 
 // Serve static files from the React app build

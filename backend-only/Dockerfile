@@ -18,8 +18,11 @@ RUN npm run build
 # Create uploads directory
 RUN mkdir -p uploads/images uploads/videos uploads/documents uploads/thumbnails
 
+# Set default port
+ENV PORT=5000
+
 # Expose port
-EXPOSE 5000
+EXPOSE $PORT
 
 # Start the application
 CMD ["npm", "start"] 
