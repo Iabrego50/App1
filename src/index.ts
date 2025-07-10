@@ -85,31 +85,44 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Server is running' });
 });
 
-// Serve static files from the React app build
-const buildPath = path.join(__dirname, '../build');
-console.log('Build path:', buildPath);
-
-// Check if build directory exists
-if (require('fs').existsSync(buildPath)) {
-  console.log('✅ React build directory found');
-  app.use(express.static(buildPath));
-
-  // Handle React routing, return all requests to React app
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(buildPath, 'index.html'));
+// API root endpoint
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'BackVault API Server',
+    version: '1.0.0',
+    status: 'running',
+    endpoints: {
+      health: '/api/health',
+      auth: '/api/auth',
+      users: '/api/users',
+      projects: '/api/projects',
+      tasks: '/api/tasks',
+      upload: '/api/upload',
+      comments: '/api/comments',
+      likes: '/api/likes',
+      ai: '/api/ai'
+    }
   });
-} else {
-  console.log('❌ React build directory not found at:', buildPath);
-  // Fallback for when build doesn't exist
-  app.get('/', (req, res) => {
-    res.json({ 
-      message: 'Server is running but React build not found',
-      buildPath: buildPath,
-      dirname: __dirname,
-      availablePaths: require('fs').readdirSync(__dirname + '/..')
-    });
+});
+
+// Catch-all for undefined routes
+app.get('*', (req, res) => {
+  res.status(404).json({ 
+    error: 'Not Found',
+    message: 'API endpoint not found',
+    availableEndpoints: [
+      '/api/health',
+      '/api/auth',
+      '/api/users',
+      '/api/projects',
+      '/api/tasks',
+      '/api/upload',
+      '/api/comments',
+      '/api/likes',
+      '/api/ai'
+    ]
   });
-}
+});
 
 // Initialize database and start server
 initializeDatabase()
