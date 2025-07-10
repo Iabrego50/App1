@@ -40,6 +40,11 @@ app.use(cors({
       return callback(null, true);
     }
     
+    // Allow Netlify domains
+    if (origin.includes('netlify.app') || origin.includes('netlify.com')) {
+      return callback(null, true);
+    }
+    
     // In development, also allow any origin for easier testing
     if (process.env.NODE_ENV !== 'production') {
       return callback(null, true);
