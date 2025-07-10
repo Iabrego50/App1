@@ -19,15 +19,15 @@ RUN apk add --no-cache \
     giflib-dev \
     pixman-dev
 
-# Copy package files
-COPY package*.json ./
+# Copy package files from server directory
+COPY server/package*.json ./
 
 # Install ALL dependencies (including dev dependencies for build)
 RUN npm ci --include=dev
 
-# Copy source code
-COPY src ./src
-COPY tsconfig.json ./
+# Copy source code from server directory
+COPY server/src ./src
+COPY server/tsconfig.json ./
 
 # Build the application
 RUN npm run build
