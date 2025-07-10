@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.REACT_APP_API_URL || '';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://app1-production-1a24.up.railway.app';
 
 interface AIServiceResponse {
   summary: string;

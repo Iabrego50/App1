@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || '/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://app1-production-1a24.up.railway.app/api';
 
 // Get auth token from localStorage
 const getAuthToken = () => {
