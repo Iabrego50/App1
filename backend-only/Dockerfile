@@ -18,11 +18,12 @@ RUN npm run build
 # Create uploads directory
 RUN mkdir -p uploads/images uploads/videos uploads/documents uploads/thumbnails
 
-# Set default port
-ENV PORT=5000
+# Copy and set up startup script
+COPY start.sh ./start.sh
+RUN chmod +x ./start.sh
 
-# Expose port
-EXPOSE $PORT
+# Expose port (Railway will set the actual port)
+EXPOSE 5000
 
-# Start the application
-CMD ["npm", "start"] 
+# Start the application using the startup script
+CMD ["./start.sh"] 
