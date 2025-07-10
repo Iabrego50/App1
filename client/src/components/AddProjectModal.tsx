@@ -55,7 +55,9 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({ isOpen, onClose, onPr
       const fileArray = Array.from(files);
       const uploaded = await uploadService.uploadFiles(fileArray);
       if (uploaded.length > 0) {
-        setFormData(prev => ({ ...prev, thumbnail: uploaded[0].url }));
+        // Use thumbnailUrl if available, otherwise fall back to the original image URL
+        const thumbnailUrl = uploaded[0].thumbnailUrl || uploaded[0].url;
+        setFormData(prev => ({ ...prev, thumbnail: thumbnailUrl }));
       }
     } catch (error) {
       console.error('Error uploading thumbnail:', error);
@@ -73,7 +75,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({ isOpen, onClose, onPr
     e.preventDefault();
     
     if (!formData.title.trim()) {
-      alert('Please enter a research repository title');
+      alert('Please enter a research project title');
       return;
     }
 
@@ -98,8 +100,8 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({ isOpen, onClose, onPr
       });
       setUploadedFiles([]);
     } catch (error) {
-      console.error('Error creating research repository:', error);
-      alert('Failed to create research repository');
+      console.error('Error creating research project:', error);
+      alert('Failed to create research project');
     }
   };
 
@@ -121,7 +123,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({ isOpen, onClose, onPr
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label htmlFor="title" className="block text-sm font-medium text-gray-700 dark:text-robinhood-text-muted mb-2 transition-colors duration-200">
-              Research Repository Title *
+              Research Project Title *
             </label>
             <input
               type="text"
@@ -130,7 +132,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({ isOpen, onClose, onPr
               value={formData.title}
               onChange={handleInputChange}
               className="w-full px-3 py-2 border border-gray-300 dark:border-robinhood-light-gray rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-robinhood-black text-gray-900 dark:text-robinhood-text-light transition-colors duration-200"
-              placeholder="Enter research repository title"
+              placeholder="Enter research project title"
               required
             />
           </div>
@@ -166,13 +168,13 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({ isOpen, onClose, onPr
               onChange={handleInputChange}
               rows={3}
               className="w-full px-3 py-2 border border-gray-300 dark:border-robinhood-light-gray rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-robinhood-black text-gray-900 dark:text-robinhood-text-light transition-colors duration-200"
-              placeholder="Enter research repository description"
+              placeholder="Enter research project description"
             />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-robinhood-text-muted mb-2 transition-colors duration-200">
-              Research Repository Thumbnail
+              Research Project Thumbnail
             </label>
             <div className="flex items-center space-x-4">
               <button

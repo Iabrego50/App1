@@ -24,6 +24,14 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onClick, onDelete, o
     }
   };
 
+  // Convert server URLs to use the client's proxy to avoid CORS issues
+  const makeProxyUrl = (url: string) => {
+    if (url.startsWith('http://localhost:5000')) {
+      return url.replace('http://localhost:5000', '');
+    }
+    return url;
+  };
+
   // Extract segment from description if it exists
   const getSegment = (description?: string) => {
     if (!description) return null;
@@ -39,12 +47,12 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onClick, onDelete, o
       className="bg-white dark:bg-robinhood-dark-gray rounded-xl shadow-md overflow-hidden cursor-pointer transform hover:scale-105 transition-all duration-200 flex flex-col relative group border border-gray-200 dark:border-robinhood-light-gray"
       onClick={() => onClick(project)}
     >
-      {/* Action buttons */}
-      <div className="absolute top-3 right-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex space-x-2">
+      {/* Action buttons - Now more visible and accessible */}
+      <div className="absolute top-3 right-3 z-10 opacity-0 group-hover:opacity-100 transition-all duration-200 flex space-x-2">
         {onEdit && (
           <button
             onClick={handleEdit}
-            className="bg-blue-500 text-white p-2 rounded-full hover:bg-blue-600 transition-colors"
+            className="bg-blue-500 text-white p-2 rounded-full hover:bg-blue-600 transition-all duration-200 hover:scale-110 shadow-lg"
             title="Edit Project"
           >
             <Edit className="h-4 w-4" />
@@ -53,18 +61,23 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onClick, onDelete, o
         {onDelete && (
           <button
             onClick={handleDelete}
-            className="bg-red-500 text-white p-2 rounded-full hover:bg-red-600 transition-colors"
+            className="bg-red-500 text-white p-2 rounded-full hover:bg-red-600 transition-all duration-200 hover:scale-110 shadow-lg"
             title="Delete Project"
           >
             <Trash2 className="h-4 w-4" />
           </button>
         )}
       </div>
+
+      {/* Edit indicator overlay */}
+      <div className="absolute top-0 left-0 w-full h-full bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-all duration-200 pointer-events-none">
+        <div className="absolute inset-0 border-2 border-transparent group-hover:border-blue-400 rounded-xl transition-all duration-200"></div>
+      </div>
       
       <div className="h-48 bg-gradient-to-br from-blue-500 to-purple-600 dark:from-robinhood-green dark:to-robinhood-green-dark relative overflow-hidden">
         {project.thumbnail ? (
           <img 
-            src={project.thumbnail} 
+            src={makeProxyUrl(project.thumbnail)} 
             alt={project.title}
             className="w-full h-full object-cover"
           />

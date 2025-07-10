@@ -10,6 +10,7 @@ import { projectRoutes } from './routes/projects';
 import { uploadRoutes } from './routes/upload';
 import commentRoutes from './routes/comments';
 import likeRoutes from './routes/likes';
+import aiRoutes from './routes/ai';
 import { initializeDatabase } from './database/init';
 
 dotenv.config();
@@ -18,9 +19,35 @@ const app = express();
 const PORT = parseInt(process.env.PORT || '5000', 10);
 
 // Middleware
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:", "http://*:5000", "http://*:3000"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      connectSrc: ["'self'", "http://*:5000", "http://*:3000"]
+    }
+  }
+}));
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://192.168.1.100:3000', 'http://192.168.1.101:3000', 'http://192.168.1.102:3000', 'http://192.168.1.103:3000', 'http://192.168.1.104:3000', 'http://192.168.1.105:3000'],
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Allow localhost and any IP address on port 3000
+    if (origin.match(/^http:\/\/(localhost|127\.0\.0\.1|\d+\.\d+\.\d+\.\d+):3000$/)) {
+      return callback(null, true);
+    }
+    
+    // In development, also allow any origin for easier testing
+    if (process.env.NODE_ENV !== 'production') {
+      return callback(null, true);
+    }
+    
+    // Reject other origins in production
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true
 }));
 app.use(express.json());
@@ -35,8 +62,13 @@ app.use((req, res, next) => {
   next();
 });
 
-// Serve uploaded files
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Serve uploaded files with CORS headers
+app.use('/uploads', (req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  next();
+}, express.static(path.join(__dirname, '../uploads')));
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -46,6 +78,7 @@ app.use('/api/projects', projectRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/comments', commentRoutes);
 app.use('/api/likes', likeRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

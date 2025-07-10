@@ -44,12 +44,20 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose, onProject
   }
 
   const makeAbsoluteUrl = (url: string) => {
-    if (url.startsWith('http')) return url;
-    return `${window.location.origin}${url}`;
+    if (url.startsWith('http')) {
+      // Convert server URLs to use the client's proxy
+      return url.replace('http://localhost:5000', '');
+    }
+    // For relative URLs, return as-is (they'll be proxied)
+    return url;
   };
 
   // Initialize files from project media
   useEffect(() => {
+    console.log('ProjectModal initialized with project:', project);
+    console.log('Current user:', user);
+    console.log('User authentication token:', localStorage.getItem('token'));
+    
     const files: ProjectFile[] = project.media?.map(media => ({
       id: media.id.toString(),
       name: media.filename,
@@ -58,9 +66,10 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose, onProject
       thumbnail: media.thumbnail_url ? makeAbsoluteUrl(media.thumbnail_url) : (media.type === 'image' ? makeAbsoluteUrl(media.url) : undefined)
     })) || [];
     
+    console.log('Initialized project files:', files);
     setProjectFiles(files);
     setOriginalFiles(files);
-  }, [project]);
+  }, [project, user]);
 
   // Track changes
   useEffect(() => {
@@ -98,16 +107,41 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose, onProject
       return;
     }
 
+    console.log('=== UPLOAD PROCESS START ===');
+    console.log('Files selected:', files.length);
+    console.log('User:', user);
+    console.log('Auth token:', localStorage.getItem('token'));
+
     setUploading(true);
     try {
       const fileArray = Array.from(files);
+      console.log('File array created:', fileArray.map(f => ({
+        name: f.name,
+        size: f.size,
+        type: f.type
+      })));
+
+      console.log('Calling uploadService.uploadFiles...');
       const uploadedFiles: UploadedFile[] = await uploadService.uploadFiles(fileArray);
+      console.log('Upload successful! Files received:', uploadedFiles);
       
       // Add new files to the project
       const newFiles: ProjectFile[] = uploadedFiles.map(file => {
         const mappedType = mapFileType(file);
         const absUrl = makeAbsoluteUrl(file.url);
         const thumbnailUrl = file.thumbnailUrl ? makeAbsoluteUrl(file.thumbnailUrl) : undefined;
+        
+        console.log('Mapping uploaded file:', {
+          original: file,
+          mapped: {
+            id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+            name: file.originalname,
+            type: mappedType,
+            url: absUrl,
+            thumbnail: thumbnailUrl || (mappedType === 'image' ? absUrl : undefined)
+          }
+        });
+        
         return {
           id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
           name: file.originalname,
@@ -117,11 +151,20 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose, onProject
         };
       });
 
+      console.log('New files to add to project:', newFiles);
       setProjectFiles(prev => [...prev, ...newFiles]);
       setShowAddFile(false);
-    } catch (error) {
+      console.log('=== UPLOAD PROCESS SUCCESS ===');
+    } catch (error: any) {
+      console.error('=== UPLOAD PROCESS ERROR ===');
       console.error('Error uploading files:', error);
-      alert('Failed to upload files');
+      console.error('Error details:', {
+        message: error?.message,
+        response: error?.response?.data,
+        status: error?.response?.status,
+        statusText: error?.response?.statusText
+      });
+      alert('Failed to upload files: ' + (error?.response?.data?.message || error?.message || 'Unknown error'));
     } finally {
       setUploading(false);
     }
@@ -152,6 +195,11 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose, onProject
       return;
     }
 
+    console.log('Starting save process...');
+    console.log('User:', user);
+    console.log('Has changes:', hasChanges);
+    console.log('Project ID:', project.id);
+
     setSaving(true);
     try {
       // Get the files that were added (not in original files)
@@ -165,33 +213,61 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose, onProject
       );
 
       console.log('Saving changes:', { addedFiles, deletedFiles });
+      console.log('Added files count:', addedFiles.length);
+      console.log('Deleted files count:', deletedFiles.length);
 
       // Add new files to the project
       for (const file of addedFiles) {
+        console.log('Processing added file:', file);
         console.log('Payload to addMedia:', {
           type: file.type,
           url: file.url,
           filename: file.name,
           thumbnailUrl: file.thumbnail
         });
-        await projectService.addMedia(project.id, {
-          type: file.type,
-          url: file.url,
-          filename: file.name,
-          thumbnailUrl: file.thumbnail
-        });
+        
+        console.log('=== DETAILED PAYLOAD ANALYSIS ===');
+        console.log('Type:', file.type, 'typeof:', typeof file.type);
+        console.log('URL:', file.url, 'typeof:', typeof file.url);
+        console.log('Filename:', file.name, 'typeof:', typeof file.name);
+        console.log('ThumbnailUrl:', file.thumbnail, 'typeof:', typeof file.thumbnail);
+        console.log('=== END PAYLOAD ANALYSIS ===');
+        
+        try {
+          const result = await projectService.addMedia(project.id, {
+            type: file.type,
+            url: file.url,
+            filename: file.name,
+            thumbnailUrl: file.thumbnail
+          });
+          console.log('Successfully added media:', result);
+        } catch (mediaError) {
+          console.error('Error adding specific media:', mediaError);
+          throw mediaError;
+        }
       }
 
       // Delete removed files from the project
       for (const file of deletedFiles) {
         if (!isNaN(Number(file.id))) {
-          console.log('Deleting file:', file);
-          await projectService.deleteMedia(project.id, Number(file.id));
+          console.log('Processing deleted file:', file);
+          try {
+            await projectService.deleteMedia(project.id, Number(file.id));
+            console.log('Successfully deleted media:', file.id);
+          } catch (deleteError) {
+            console.error('Error deleting specific media:', deleteError);
+            throw deleteError;
+          }
+        } else {
+          console.log('Skipping delete for non-numeric ID:', file.id);
         }
       }
 
       // Update the project state
+      console.log('Fetching updated project...');
       const updatedProject = await projectService.getById(project.id);
+      console.log('Updated project:', updatedProject);
+      
       if (onProjectUpdate) {
         onProjectUpdate(updatedProject);
       }
@@ -200,10 +276,18 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose, onProject
       setOriginalFiles(projectFiles);
       setHasChanges(false);
 
+      console.log('Save completed successfully!');
       // Close the modal
       onClose();
     } catch (error: any) {
       console.error('Error saving project changes:', error);
+      console.error('Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        statusText: error.response?.statusText
+      });
+      
       const errorMessage = error.response?.data?.message || error.message || 'Failed to save changes';
       alert(`Failed to save changes: ${errorMessage}`);
     } finally {
@@ -336,7 +420,14 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose, onProject
                 {projectFiles.map((file, index) => (
                   <div key={file.id} className="w-full flex-shrink-0 p-6">
                     <div className="flex items-center justify-center mb-4">
-                      {file.thumbnail ? (
+                      {file.type === 'doc' && file.name.toLowerCase().endsWith('.pdf') ? (
+                        <div className="w-64 h-64 bg-red-50 dark:bg-red-900/20 rounded-lg flex flex-col items-center justify-center shadow-sm border-2 border-red-200 dark:border-red-700">
+                          <div className="text-6xl text-red-600 dark:text-red-400 mb-2">📄</div>
+                          <div className="text-sm text-red-700 dark:text-red-300 font-medium text-center px-4">
+                            PDF Document
+                          </div>
+                        </div>
+                      ) : file.thumbnail && (file.type === 'image' || file.type === 'video') ? (
                         <img 
                           src={file.thumbnail} 
                           alt={file.name}
@@ -376,25 +467,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose, onProject
                 ))}
               </div>
 
-              {/* Carousel Indicators */}
-              {projectFiles.length > 1 && (
-                <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
-                  <div className="flex space-x-2">
-                    {projectFiles.map((_, index) => (
-                      <button
-                        key={index}
-                        onClick={() => setCurrentFileIndex(index)}
-                        className={`w-3 h-3 rounded-full transition-all duration-200 ${
-                          index === currentFileIndex
-                            ? 'bg-blue-600 scale-110'
-                            : 'bg-gray-300 dark:bg-robinhood-light-gray hover:bg-gray-400 dark:hover:bg-robinhood-text-muted'
-                        }`}
-                        aria-label={`Go to file ${index + 1}`}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
+
 
               {/* Navigation Arrows */}
               {projectFiles.length > 1 && (

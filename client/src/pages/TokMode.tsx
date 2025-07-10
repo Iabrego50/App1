@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowLeft, Heart, MessageCircle, Share, Bookmark, Send, FileText, Image, Video, Download, ExternalLink, Users, Plus } from 'lucide-react';
+import { ArrowLeft, Heart, MessageCircle, Share, Bookmark, Send, FileText, Image, Video, Download, ExternalLink, Users, Plus, Trash2, Save, RefreshCw, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Project } from '../types/Project';
 import { projectService } from '../services/projectService';
 import { commentService, Comment } from '../services/commentService';
 import { likeService, Like } from '../services/likeService';
 import { shareService } from '../services/shareService';
+import { uploadService, UploadedFile } from '../services/uploadService';
+import { aiService } from '../services/aiService';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ProjectStats {
   likes: Like[];
@@ -14,14 +17,39 @@ interface ProjectStats {
   isLiked: boolean;
 }
 
+interface ProjectFile {
+  id: string;
+  name: string;
+  type: 'video' | 'image' | 'doc';
+  url: string;
+  thumbnail?: string;
+}
+
 const TokMode: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [touchStart, setTouchStart] = useState(0);
   const [touchEnd, setTouchEnd] = useState(0);
+  
+  // Create infinite projects array for seamless scrolling
+  const infiniteProjects = React.useMemo(() => {
+    if (projects.length === 0) return [];
+    
+    // Create a larger array by repeating the projects multiple times
+    const repetitions = 10; // Repeat projects 10 times to create infinite effect
+    const infinite: Project[] = [];
+    
+    for (let i = 0; i < repetitions; i++) {
+      infinite.push(...projects);
+    }
+    
+    return infinite;
+  }, [projects]);
 
   const [projectStats, setProjectStats] = useState<{ [key: number]: ProjectStats }>({});
   const [showComments, setShowComments] = useState(false);
@@ -34,10 +62,193 @@ const TokMode: React.FC = () => {
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [editingTldr, setEditingTldr] = useState<number | null>(null);
   const [tldrQuotes, setTldrQuotes] = useState<{ [key: number]: string }>({});
+  const [generatingSummaries, setGeneratingSummaries] = useState(false);
+  const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null);
+
+  // File upload states
+  const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+  const [originalFiles, setOriginalFiles] = useState<ProjectFile[]>([]);
+
+  // File upload helper functions
+  const allowedTypes = ['video', 'image', 'doc'] as const;
+  
+  function isAllowedType(type: string): type is 'video' | 'image' | 'doc' {
+    return allowedTypes.includes(type as any);
+  }
+
+  function mapFileType(file: UploadedFile): 'video' | 'image' | 'doc' {
+    if (file.mimetype.startsWith('image/')) return 'image';
+    if (file.mimetype.startsWith('video/')) return 'video';
+    return 'doc';
+  }
+
+  const makeAbsoluteUrl = (url: string) => {
+    if (url.startsWith('http')) {
+      // Convert server URLs to use the client's proxy
+      return url.replace('http://localhost:5000', '');
+    }
+    // For relative URLs, return as-is (they'll be proxied)
+    return url;
+  };
+
+  // Initialize files when project is selected
+  useEffect(() => {
+    if (selectedProject) {
+      const files: ProjectFile[] = selectedProject.media?.map(media => ({
+        id: media.id.toString(),
+        name: media.filename,
+        type: media.type,
+        url: makeAbsoluteUrl(media.url),
+        thumbnail: media.thumbnail_url ? makeAbsoluteUrl(media.thumbnail_url) : (media.type === 'image' ? makeAbsoluteUrl(media.url) : undefined)
+      })) || [];
+      
+      setProjectFiles(files);
+      setOriginalFiles(files);
+      setHasChanges(false);
+    }
+  }, [selectedProject]);
+
+  // Track changes
+  useEffect(() => {
+    const filesChanged = JSON.stringify(projectFiles) !== JSON.stringify(originalFiles);
+    setHasChanges(filesChanged);
+  }, [projectFiles, originalFiles]);
+
+  // File upload handler
+  const handleAddFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    if (!user) {
+      alert('You must be logged in to add files');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const fileArray = Array.from(files);
+      const uploadedFiles: UploadedFile[] = await uploadService.uploadFiles(fileArray);
+      
+      // Add new files to the project
+      const newFiles: ProjectFile[] = uploadedFiles.map(file => {
+        const mappedType = mapFileType(file);
+        const absUrl = makeAbsoluteUrl(file.url);
+        const thumbnailUrl = file.thumbnailUrl ? makeAbsoluteUrl(file.thumbnailUrl) : undefined;
+        
+        return {
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+          name: file.originalname,
+          type: mappedType,
+          url: absUrl,
+          thumbnail: thumbnailUrl || (mappedType === 'image' ? absUrl : undefined)
+        };
+      });
+
+      setProjectFiles(prev => [...prev, ...newFiles]);
+      // Clear file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } catch (error: any) {
+      console.error('Error uploading files:', error);
+      alert('Failed to upload files: ' + (error?.response?.data?.message || error?.message || 'Unknown error'));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Delete file handler
+  const handleDeleteFile = (fileId: string) => {
+    if (window.confirm('Are you sure you want to delete this file?')) {
+      setProjectFiles(prev => prev.filter(file => file.id !== fileId));
+    }
+  };
+
+  // Save changes handler
+  const handleSave = async () => {
+    if (!hasChanges || !selectedProject) return;
+    
+    if (!user) {
+      alert('You must be logged in to save changes');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // Find new files (files that weren't in original)
+      const newFiles = projectFiles.filter(file => 
+        !originalFiles.some(originalFile => originalFile.id === file.id)
+      );
+
+      // Add new files to the project
+      for (const file of newFiles) {
+        await projectService.addMedia(selectedProject.id, {
+          type: file.type,
+          url: file.url,
+          filename: file.name,
+          thumbnailUrl: file.thumbnail
+        });
+      }
+
+      // Update the projects list
+      const updatedProjects = projects.map(p => 
+        p.id === selectedProject.id 
+          ? { ...p, media: [...(p.media || []), ...newFiles.map(f => ({
+              id: parseInt(f.id),
+              type: f.type,
+              url: f.url,
+              filename: f.name,
+              thumbnail_url: f.thumbnail
+            }))] }
+          : p
+      );
+      
+      setProjects(updatedProjects);
+      setOriginalFiles(projectFiles);
+      setHasChanges(false);
+      
+      alert('Changes saved successfully!');
+    } catch (error: any) {
+      console.error('Error saving changes:', error);
+      alert('Failed to save changes: ' + (error?.response?.data?.message || error?.message || 'Unknown error'));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   useEffect(() => {
     fetchProjects();
   }, []);
+
+  // Initialize currentIndex to middle of infinite array when projects are loaded
+  useEffect(() => {
+    if (projects.length > 0 && currentIndex === 0) {
+      const middleStart = Math.floor(infiniteProjects.length / 2 - projects.length / 2);
+      setCurrentIndex(middleStart);
+    }
+  }, [projects.length, infiniteProjects.length, currentIndex]);
+
+  // Auto-scroll to current index
+  useEffect(() => {
+    if (containerRef.current && infiniteProjects.length > 0) {
+      const cardHeight = 505; // 500px card height + 5px gap
+      const scrollTop = currentIndex * cardHeight;
+      containerRef.current.scrollTo({
+        top: scrollTop,
+        behavior: 'smooth'
+      });
+    }
+  }, [currentIndex, infiniteProjects.length]);
+
+  // Generate AI summaries when projects are loaded
+  useEffect(() => {
+    if (projects.length > 0 && Object.keys(tldrQuotes).length === 0) {
+      generateAISummaries();
+    }
+  }, [projects.length]);
 
   const fetchProjects = async () => {
     try {
@@ -89,20 +300,27 @@ const TokMode: React.FC = () => {
   };
 
   const smoothScrollTo = useCallback((newIndex: number) => {
-    if (newIndex === currentIndex) return;
+    if (newIndex === currentIndex || infiniteProjects.length === 0) return;
     
-    // Handle infinite scroll logic
     let targetIndex = newIndex;
-    if (newIndex >= projects.length) {
-      // If we're going past the last project, wrap to the beginning
-      targetIndex = 0;
+    
+    // Handle infinite scroll logic - ensure we stay within bounds of infinite array
+    if (newIndex >= infiniteProjects.length) {
+      // If we're going past the end, continue from the beginning
+      targetIndex = newIndex % projects.length;
     } else if (newIndex < 0) {
-      // If we're going before the first project, wrap to the end
-      targetIndex = projects.length - 1;
+      // If we're going before the beginning, continue from the end
+      targetIndex = infiniteProjects.length + newIndex;
+    }
+    
+    // Reset to middle section if we get too far from the original range
+    const middleStart = Math.floor(infiniteProjects.length / 2 - projects.length / 2);
+    if (targetIndex < projects.length || targetIndex >= infiniteProjects.length - projects.length) {
+      targetIndex = middleStart + (targetIndex % projects.length);
     }
     
     setCurrentIndex(targetIndex);
-  }, [currentIndex, projects.length]);
+  }, [currentIndex, infiniteProjects.length, projects.length]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     setTouchStart(e.targetTouches[0].clientY);
@@ -307,6 +525,51 @@ const TokMode: React.FC = () => {
     setShowComments(true);
   };
 
+  // Generate AI summaries for all projects
+  const generateAISummaries = async () => {
+    if (projects.length === 0) return;
+    
+    setGeneratingSummaries(true);
+    try {
+      const summaries = await aiService.generateBulkSummaries(projects.map(project => ({
+        id: project.id,
+        title: project.title,
+        description: project.description,
+        media: project.media?.map(m => ({ filename: m.filename, type: m.type }))
+      })));
+      
+      setTldrQuotes(summaries);
+    } catch (error) {
+      console.error('Error generating AI summaries:', error);
+    } finally {
+      setGeneratingSummaries(false);
+    }
+  };
+
+  // Regenerate AI summary for a specific project
+  const regenerateAISummary = async (projectIndex: number) => {
+    const project = projects[projectIndex];
+    if (!project) return;
+    
+    setRegeneratingIndex(projectIndex);
+    try {
+      const result = await aiService.generateProjectSummary({
+        title: project.title,
+        description: project.description,
+        media: project.media?.map(m => ({ filename: m.filename, type: m.type }))
+      });
+      
+      setTldrQuotes(prev => ({
+        ...prev,
+        [projectIndex]: result.summary
+      }));
+    } catch (error) {
+      console.error('Error regenerating AI summary:', error);
+    } finally {
+      setRegeneratingIndex(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="fixed inset-0 bg-black flex items-center justify-center">
@@ -340,7 +603,6 @@ const TokMode: React.FC = () => {
       onWheel={handleWheel}
       onKeyDown={handleKeyDown}
       tabIndex={0}
-      ref={containerRef}
     >
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-50 p-4 bg-gradient-to-b from-black/50 to-transparent">
@@ -352,45 +614,97 @@ const TokMode: React.FC = () => {
             <ArrowLeft size={24} />
           </button>
           <h1 className="text-white text-lg font-semibold">Tok Mode</h1>
-          <div className="w-6"></div>
+          <button
+            onClick={generateAISummaries}
+            disabled={generatingSummaries}
+            className="text-white hover:text-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
+            title="Regenerate AI Summaries"
+          >
+            {generatingSummaries ? (
+              <>
+                <RefreshCw size={20} className="animate-spin" />
+                <span className="text-xs">Generating...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles size={20} />
+                <span className="text-xs">AI</span>
+              </>
+            )}
+          </button>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="relative h-full overflow-y-auto pt-16 pb-8 w-full scroll-smooth">
-        <div className="w-full" style={{ display: 'flex', flexDirection: 'column', gap: '80px', paddingBottom: '80px' }}>
-          {projects.map((project, index) => {
-            const stats = projectStats[index];
+      <div ref={containerRef} className="relative h-full overflow-y-auto pt-16 pb-8 w-full scroll-smooth">
+        <div className="w-full" style={{ display: 'flex', flexDirection: 'column', gap: '5px', paddingBottom: '20px' }}>
+          {infiniteProjects.map((project, index) => {
+            // Map to original project index for stats
+            const originalIndex = index % projects.length;
+            const stats = projectStats[originalIndex];
             
             return (
               <div
                 key={`${project.id}-${index}`}
-                className="flex items-center justify-center p-4 relative w-full"
-                style={{ height: '400px' }}
+                className="flex items-center justify-center p-1 relative w-full min-h-[500px]"
               >
                 {/* Project Card */}
                 <div 
-                  className="bg-gray-900 rounded-3xl p-2 w-[320px] max-w-[95vw] shadow-2xl border border-gray-800 transform transition-all duration-300 hover:scale-105 cursor-pointer hover:bg-gray-800"
+                  className="bg-gray-900 rounded-3xl p-3 w-[320px] max-w-[95vw] shadow-2xl border border-gray-800 transform transition-all duration-300 hover:scale-105 cursor-pointer hover:bg-gray-800 max-h-[480px] overflow-hidden"
                   onClick={() => handleTileClick(project)}
                 >
                   {/* TLDR Section */}
-                  <div className="mb-2">
+                  <div className="mb-3">
                     <div className="flex items-center justify-between mb-1">
-                      <h3 className="text-white text-xs sm:text-sm font-bold">TLDR</h3>
+                      <div className="flex items-center space-x-1">
+                        <h3 className="text-white text-xs sm:text-sm font-bold">TLDR</h3>
+                        <Sparkles size={10} className="text-purple-400" />
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          regenerateAISummary(originalIndex);
+                        }}
+                        disabled={regeneratingIndex === originalIndex || generatingSummaries}
+                        className="text-purple-400 hover:text-purple-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Regenerate AI Summary"
+                      >
+                        <RefreshCw 
+                          size={12} 
+                          className={regeneratingIndex === originalIndex ? 'animate-spin' : ''} 
+                        />
+                      </button>
                     </div>
                     
-                    <div className="bg-gray-800 rounded-lg p-0">
-                      <p className="text-gray-300 text-xs leading-relaxed">
-                        {tldrQuotes[index] || "No TLDR available for this research project."}
-                      </p>
+                    <div className="bg-gray-800 rounded-lg p-2 min-h-[40px] max-h-[60px] overflow-hidden flex items-center">
+                      {regeneratingIndex === originalIndex ? (
+                        <div className="flex items-center space-x-2 text-gray-400">
+                          <RefreshCw size={12} className="animate-spin" />
+                          <span className="text-xs">Generating AI summary...</span>
+                        </div>
+                      ) : generatingSummaries ? (
+                        <div className="flex items-center space-x-2 text-gray-400">
+                          <Sparkles size={12} className="animate-pulse" />
+                          <span className="text-xs">AI is analyzing...</span>
+                        </div>
+                      ) : (
+                        <p className="text-gray-300 text-xs leading-relaxed" style={{ 
+                          display: '-webkit-box', 
+                          WebkitLineClamp: 3, 
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden'
+                        }}>
+                          {tldrQuotes[originalIndex] || "Generating AI summary..."}
+                        </p>
+                      )}
                     </div>
                   </div>
 
                   {/* Project Image/Thumbnail */}
-                  <div className="aspect-square bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl mb-2 flex items-center justify-center overflow-hidden">
+                  <div className="aspect-square bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl mb-3 flex items-center justify-center overflow-hidden">
                     {project.thumbnail ? (
                       <img 
-                        src={project.thumbnail} 
+                        src={project.thumbnail.startsWith('http://localhost:5000') ? project.thumbnail.replace('http://localhost:5000', '') : project.thumbnail} 
                         alt={project.title}
                         className="w-full h-full object-cover rounded-2xl transition-transform duration-300 hover:scale-110"
                       />
@@ -407,13 +721,13 @@ const TokMode: React.FC = () => {
                   </div>
 
                   {/* Interaction Buttons */}
-                  <div className="flex items-center justify-between px-2 pb-2">
+                  <div className="flex items-center justify-between px-3 pb-3">
                     {/* Like Button */}
                     <div className="flex items-center space-x-1">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleLike(index);
+                          handleLike(originalIndex);
                         }}
                         className="text-gray-400 hover:text-red-500 transition-colors"
                       >
@@ -425,7 +739,7 @@ const TokMode: React.FC = () => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          setCurrentIndex(index);
+                          setCurrentIndex(originalIndex);
                           setShowLikes(true);
                         }}
                         className="text-gray-400 hover:text-red-500 transition-colors text-sm"
@@ -440,7 +754,7 @@ const TokMode: React.FC = () => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          setCurrentIndex(index);
+                          setCurrentIndex(originalIndex);
                           setShowComments(true);
                         }}
                         className="text-gray-400 hover:text-blue-500 transition-colors"
@@ -450,7 +764,7 @@ const TokMode: React.FC = () => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          setCurrentIndex(index);
+                          setCurrentIndex(originalIndex);
                           setShowComments(true);
                         }}
                         className="text-gray-400 hover:text-blue-500 transition-colors text-sm"
@@ -464,7 +778,7 @@ const TokMode: React.FC = () => {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setCurrentIndex(index);
+                        setCurrentIndex(originalIndex);
                         setShowShare(true);
                       }}
                       className="flex items-center space-x-1 text-gray-400 hover:text-green-500 transition-colors"
@@ -479,8 +793,6 @@ const TokMode: React.FC = () => {
           })}
         </div>
       </div>
-
-
 
       {/* Comments Modal */}
       {showComments && (
@@ -671,6 +983,16 @@ const TokMode: React.FC = () => {
         </div>
       )}
 
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx"
+        style={{ display: 'none' }}
+        onChange={handleAddFile}
+      />
+
       {/* Project Modal */}
       {showProjectModal && selectedProject && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
@@ -679,18 +1001,36 @@ const TokMode: React.FC = () => {
             <div className="p-6 border-b border-gray-800">
               <div className="flex items-center justify-between">
                 <h2 className="text-white text-2xl font-bold">{selectedProject.title}</h2>
-                <button
-                  onClick={() => {
-                    console.log('Selected project in modal:', selectedProject); // Debug log
-                    console.log('Selected project media:', selectedProject.media); // Debug log
-                    setShowProjectModal(false);
-                  }}
-                  className="text-gray-400 hover:text-white transition-colors"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+                <div className="flex items-center space-x-3">
+                  {hasChanges && (
+                    <button
+                      onClick={handleSave}
+                      disabled={saving}
+                      className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
+                    >
+                      <Save size={16} />
+                      <span>{saving ? 'Saving...' : 'Save'}</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      if (hasChanges) {
+                        const confirmed = window.confirm('You have unsaved changes. Are you sure you want to close without saving?');
+                        if (!confirmed) return;
+                      }
+                      setShowProjectModal(false);
+                      setSelectedProject(null);
+                      setProjectFiles([]);
+                      setOriginalFiles([]);
+                      setHasChanges(false);
+                    }}
+                    className="text-gray-400 hover:text-white transition-colors"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -713,38 +1053,64 @@ const TokMode: React.FC = () => {
               <div className="mb-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-white text-xl font-bold">Media Files</h3>
-                  <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2">
+                  <button 
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
+                  >
                     <Plus size={16} />
-                    <span>Add New File</span>
+                    <span>{uploading ? 'Uploading...' : 'Add New File'}</span>
                   </button>
                 </div>
                 
-                {selectedProject.media && selectedProject.media.length > 0 ? (
+                {projectFiles && projectFiles.length > 0 ? (
                   <div className="space-y-3 max-h-96 overflow-y-auto">
-                    {selectedProject.media.map((media) => (
+                    {projectFiles.map((file) => (
                       <div
-                        key={media.id}
-                        onClick={() => handleFileClick(media)}
+                        key={file.id}
                         className="bg-gray-800 rounded-xl p-4 flex items-center justify-between cursor-pointer hover:bg-gray-700 transition-all duration-300 group border border-gray-700 hover:border-blue-500"
                       >
-                        <div className="flex items-center space-x-4">
-                          <div className="w-12 h-12 bg-gray-700 rounded-lg flex items-center justify-center">
-                            {getFileIcon(media.filename)}
+                        <div 
+                          className="flex items-center space-x-4 flex-1"
+                          onClick={() => handleFileClick({ url: file.url, filename: file.name })}
+                        >
+                          <div className="w-12 h-12 bg-gray-700 rounded-lg flex items-center justify-center overflow-hidden">
+                            {file.type === 'doc' && file.name.toLowerCase().endsWith('.pdf') ? (
+                              <div className="text-red-400 text-lg">📄</div>
+                            ) : file.thumbnail && (file.type === 'image' || file.type === 'video') ? (
+                              <img 
+                                src={file.thumbnail} 
+                                alt={file.name}
+                                className="w-full h-full object-cover rounded-lg"
+                              />
+                            ) : (
+                              getFileIcon(file.name)
+                            )}
                           </div>
                           <div>
                             <div className="text-white font-medium truncate max-w-[250px]">
-                              {media.filename}
+                              {file.name}
                             </div>
                             <div className="text-gray-400 text-sm flex items-center space-x-2">
-                              <span className="capitalize bg-gray-600 px-2 py-1 rounded text-xs">{media.type}</span>
+                              <span className="capitalize bg-gray-600 px-2 py-1 rounded text-xs">{file.type}</span>
                               <span>•</span>
                               <span>Click to open</span>
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center space-x-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center space-x-3">
                           <ExternalLink size={18} className="text-blue-400" />
                           <Download size={18} className="text-green-400" />
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteFile(file.id);
+                            }}
+                            className="text-red-400 hover:text-red-300 transition-colors"
+                            title="Delete file"
+                          >
+                            <Trash2 size={18} />
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -753,9 +1119,13 @@ const TokMode: React.FC = () => {
                   <div className="text-center py-12 bg-gray-800 rounded-xl border-2 border-dashed border-gray-600">
                     <FileText className="w-16 h-16 text-gray-600 mx-auto mb-4" />
                     <p className="text-gray-400 text-lg mb-4">No media files attached</p>
-                    <button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-colors flex items-center space-x-2 mx-auto">
+                    <button 
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                      className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white px-6 py-3 rounded-lg transition-colors flex items-center space-x-2 mx-auto"
+                    >
                       <Plus size={18} />
-                      <span>Add Your First File</span>
+                      <span>{uploading ? 'Uploading...' : 'Add Your First File'}</span>
                     </button>
                   </div>
                 )}

@@ -5,7 +5,7 @@ import ProjectGrid from '../components/ProjectGrid';
 import ProjectModal from '../components/ProjectModal';
 import AddProjectModal from '../components/AddProjectModal';
 import { projectService } from '../services/projectService';
-import { Plus, Building2, Edit } from 'lucide-react';
+import { Plus, Building2, Edit, Sparkles, Camera, Upload } from 'lucide-react';
 
 const Projects: React.FC = () => {
   const navigate = useNavigate();
@@ -34,7 +34,7 @@ const Projects: React.FC = () => {
       const data = await projectService.getAll();
       setProjects(data);
     } catch (error) {
-      console.error('Error fetching research repositories:', error);
+              console.error('Error fetching research projects:', error);
     } finally {
       setLoading(false);
     }
@@ -71,13 +71,13 @@ const Projects: React.FC = () => {
   };
 
   const handleDeleteProject = async (projectId: number) => {
-    if (window.confirm('Are you sure you want to delete this research repository?')) {
+          if (window.confirm('Are you sure you want to delete this research project?')) {
       try {
         await projectService.delete(projectId);
         fetchProjects();
       } catch (error) {
-        console.error('Error deleting research repository:', error);
-        alert('Failed to delete research repository');
+        console.error('Error deleting research project:', error);
+        alert('Failed to delete research project');
       }
     }
   };
@@ -98,24 +98,42 @@ const Projects: React.FC = () => {
 
   const handleSaveProjectEdit = async () => {
     if (!editingProject || !editProjectTitle.trim()) {
-      alert('Please enter a research repository title');
+      alert('Please enter a research project title');
       return;
     }
 
     try {
+      console.log('Saving project edit:', {
+        id: editingProject.id,
+        title: editProjectTitle,
+        segment: editProjectSegment,
+        description: editProjectDescription
+      });
+
       const updatedDescription = `${editProjectSegment}: ${editProjectDescription}`;
-      await projectService.update(editingProject.id, {
+      const updatedProject = await projectService.update(editingProject.id, {
         title: editProjectTitle,
         description: updatedDescription,
         thumbnail: editingProject.thumbnail
       });
       
-      fetchProjects();
+      console.log('Project updated successfully:', updatedProject);
+      
+      // Refresh the projects list
+      await fetchProjects();
+      
+      // Close the modal and reset states
       setShowEditProjectModal(false);
       setEditingProject(null);
-    } catch (error) {
-      console.error('Error updating research repository:', error);
-      alert('Failed to update research repository');
+      setEditProjectTitle('');
+      setEditProjectDescription('');
+      setEditProjectSegment('');
+      
+      alert('Project updated successfully!');
+    } catch (error: any) {
+      console.error('Error updating research project:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to update research project';
+      alert(`Failed to update project: ${errorMessage}`);
     }
   };
 
@@ -231,7 +249,7 @@ const Projects: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-robinhood-text-light transition-colors duration-200">
-            Research Repositories
+            Research Projects
           </h1>
           <p className="text-gray-600 dark:text-robinhood-text-muted mt-1 transition-colors duration-200">
             Manage your research projects and files
@@ -244,6 +262,13 @@ const Projects: React.FC = () => {
           >
             <Building2 className="h-4 w-4" />
             <span>Tok Mode</span>
+          </button>
+          <button
+            onClick={() => navigate('/ai-generator')}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center space-x-2"
+          >
+            <Sparkles className="h-4 w-4" />
+            <span>AI Image Generator</span>
           </button>
                       <button
               onClick={handleAddProject}
@@ -307,7 +332,7 @@ const Projects: React.FC = () => {
       {/* Projects Grid */}
       {loading ? (
         <div className="flex justify-center items-center py-12">
-          <div className="text-gray-600 dark:text-robinhood-text-muted">Loading research repositories...</div>
+          <div className="text-gray-600 dark:text-robinhood-text-muted">Loading research projects...</div>
         </div>
       ) : (
         <ProjectGrid
@@ -340,7 +365,7 @@ const Projects: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-robinhood-dark-gray rounded-xl p-6 w-full max-w-md transition-colors duration-200">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-robinhood-text-light mb-4 transition-colors duration-200">
-              Edit Research Repository
+              Edit Research Project
             </h3>
             <div className="space-y-4">
               <div>

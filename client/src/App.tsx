@@ -6,6 +6,8 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Projects from './pages/Projects';
 import TokMode from './pages/TokMode';
+import AiImageGenerator from './pages/AiImageGenerator';
+import Debug from './pages/Debug';
 import Layout from './components/Layout';
 
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -31,6 +33,7 @@ function AppRoutes() {
           <Register />
         </PublicRoute>
       } />
+      <Route path="/debug" element={<Debug />} />
       <Route path="/dashboard" element={
         <PrivateRoute>
           <Layout>
@@ -48,6 +51,11 @@ function AppRoutes() {
       <Route path="/tok-mode" element={
         <PrivateRoute>
           <TokMode />
+        </PrivateRoute>
+      } />
+      <Route path="/ai-generator" element={
+        <PrivateRoute>
+          <AiImageGenerator />
         </PrivateRoute>
       } />
       <Route path="/" element={<Navigate to="/dashboard" />} />

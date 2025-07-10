@@ -35,11 +35,22 @@ export const uploadService = {
 
   // Upload multiple files
   uploadFiles: async (files: File[]): Promise<UploadedFile[]> => {
+    console.log('=== UPLOAD SERVICE START ===');
+    console.log('Files to upload:', files.length);
+    console.log('API endpoint:', `${API_BASE}/files`);
+    console.log('Authorization header:', axios.defaults.headers.common['Authorization']);
+    
     const formData = new FormData();
-    files.forEach(file => {
+    files.forEach((file, index) => {
+      console.log(`Adding file ${index}:`, {
+        name: file.name,
+        size: file.size,
+        type: file.type
+      });
       formData.append('files', file);
     });
 
+    console.log('FormData created, making request...');
     try {
       const response = await axios.post(`${API_BASE}/files`, formData, {
         headers: {
@@ -47,9 +58,15 @@ export const uploadService = {
         },
       });
 
+      console.log('Upload response received:', response.data);
       return response.data.files;
     } catch (error: any) {
+      console.error('=== UPLOAD SERVICE ERROR ===');
       console.error('Upload files error:', error);
+      console.error('Error response:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      console.error('Error config:', error.config);
+      
       const errorMessage = error.response?.data?.message || error.message || 'Failed to upload files';
       throw new Error(errorMessage);
     }

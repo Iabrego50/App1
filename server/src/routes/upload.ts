@@ -8,7 +8,7 @@ import fs from 'fs';
 const router = Router();
 
 // Upload single file with thumbnail generation
-router.post('/file', authenticateToken, uploadWithThumbnails, processUploadedFile, (req: any, res: Response) => {
+router.post('/file', authenticateToken, uploadWithThumbnails, processUploadedFile, async (req: any, res: Response) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded' });
@@ -24,6 +24,35 @@ router.post('/file', authenticateToken, uploadWithThumbnails, processUploadedFil
 
     const fileUrl = getFileUrl(req.file.filename, type);
 
+    // Generate thumbnail for image files (PDFs use generic frontend thumbnail)
+    let thumbnailUrl = req.file.thumbnailUrl || null;
+    if (!thumbnailUrl) {
+      try {
+        const { thumbnailService } = await import('../services/thumbnailService');
+        
+        if (thumbnailService.canGenerateThumbnail(req.file.mimetype)) {
+          console.log('Processing image file for thumbnail:', req.file.filename, 'mimetype:', req.file.mimetype);
+          const thumbnailPath = thumbnailService.generateThumbnail(
+            req.file.path,
+            req.file.filename,
+            {
+              width: 300,
+              height: 300,
+              quality: 80,
+              format: 'jpeg'
+            }
+          );
+          if (thumbnailPath) {
+            const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+            thumbnailUrl = `${baseUrl}${thumbnailPath}`;
+            console.log('Thumbnail URL constructed:', thumbnailUrl);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to generate thumbnail for', req.file.filename, error);
+      }
+    }
+
     res.json({
       message: 'File uploaded successfully',
       file: {
@@ -33,7 +62,7 @@ router.post('/file', authenticateToken, uploadWithThumbnails, processUploadedFil
         size: req.file.size,
         url: fileUrl,
         type: type,
-        thumbnailUrl: req.file.thumbnailUrl || null
+        thumbnailUrl: thumbnailUrl
       }
     });
   } catch (error) {
@@ -44,27 +73,34 @@ router.post('/file', authenticateToken, uploadWithThumbnails, processUploadedFil
 
 // Upload multiple files with thumbnail generation
 router.post('/files', authenticateToken, (req: any, res: Response) => {
+  console.log('Upload request received');
   const uploadMultiple = upload.array('files', 10); // Allow up to 10 files
 
   uploadMultiple(req, res, async (err: any) => {
     if (err) {
+      console.error('Upload error:', err);
       return res.status(400).json({ message: err.message });
     }
 
     if (!req.files || req.files.length === 0) {
+      console.log('No files in request');
       return res.status(400).json({ message: 'No files uploaded' });
     }
 
+    console.log('Files received:', req.files.length);
     try {
       const uploadedFiles = [];
 
       for (const file of req.files) {
-        // Generate thumbnail for image files
+        // Generate thumbnail for image files (PDFs use generic frontend thumbnail)
         let thumbnailUrl = null;
-        if (file.mimetype.startsWith('image/')) {
-          try {
-            const { thumbnailService } = await import('../services/thumbnailService');
-            thumbnailUrl = await thumbnailService.generateThumbnail(
+        try {
+          const { thumbnailService } = await import('../services/thumbnailService');
+          
+          if (thumbnailService.canGenerateThumbnail(file.mimetype)) {
+            console.log('Processing image file for thumbnail:', file.filename, 'mimetype:', file.mimetype);
+            console.log('Thumbnail service imported successfully');
+            const thumbnailPath = thumbnailService.generateThumbnail(
               file.path,
               file.filename,
               {
@@ -74,9 +110,20 @@ router.post('/files', authenticateToken, (req: any, res: Response) => {
                 format: 'jpeg'
               }
             );
-          } catch (error) {
-            console.error('Failed to generate thumbnail for', file.filename, error);
+            console.log('Thumbnail generation result for', file.filename, ':', thumbnailPath);
+            if (!thumbnailPath) {
+              console.log('Thumbnail generation returned null for', file.filename);
+            } else {
+              // Convert relative path to absolute URL
+              const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+              thumbnailUrl = `${baseUrl}${thumbnailPath}`;
+              console.log('Thumbnail URL constructed:', thumbnailUrl);
+            }
+          } else {
+            console.log('File type not supported for thumbnail generation:', file.filename, file.mimetype);
           }
+        } catch (error) {
+          console.error('Failed to generate thumbnail for', file.filename, error);
         }
 
         // Determine file type
@@ -100,6 +147,7 @@ router.post('/files', authenticateToken, (req: any, res: Response) => {
         });
       }
 
+      console.log('Upload completed successfully. Files:', uploadedFiles.length);
       res.json({
         message: 'Files uploaded successfully',
         files: uploadedFiles

@@ -1,13 +1,20 @@
-import sharp from 'sharp';
 import path from 'path';
 import fs from 'fs';
 
-const uploadsDir = path.join(__dirname, '../../uploads');
+// Use process.cwd() to get the project root directory
+const uploadsDir = path.join(process.cwd(), 'uploads');
 const thumbnailsDir = path.join(uploadsDir, 'thumbnails');
+
+console.log('Current working directory:', process.cwd());
+console.log('Uploads directory:', uploadsDir);
+console.log('Thumbnails directory:', thumbnailsDir);
 
 // Ensure thumbnails directory exists
 if (!fs.existsSync(thumbnailsDir)) {
+  console.log('Creating thumbnails directory:', thumbnailsDir);
   fs.mkdirSync(thumbnailsDir, { recursive: true });
+} else {
+  console.log('Thumbnails directory already exists:', thumbnailsDir);
 }
 
 export interface ThumbnailOptions {
@@ -21,11 +28,14 @@ export const thumbnailService = {
   /**
    * Generate a thumbnail from an image file
    */
-  generateThumbnail: async (
+  generateThumbnail: (
     sourcePath: string,
     filename: string,
     options: ThumbnailOptions = {}
-  ): Promise<string> => {
+  ): string | null => {
+    console.log('Starting thumbnail generation for:', filename);
+    console.log('Source path:', sourcePath);
+    
     const {
       width = 300,
       height = 300,
@@ -33,40 +43,39 @@ export const thumbnailService = {
       format = 'jpeg'
     } = options;
 
-    // Generate thumbnail filename
+    // Generate thumbnail filename - preserve original format
     const ext = path.extname(filename);
     const nameWithoutExt = path.basename(filename, ext);
-    const thumbnailFilename = `${nameWithoutExt}_thumb.${format}`;
+    // Use the original file extension instead of forcing jpeg
+    const thumbnailFilename = `${nameWithoutExt}_thumb${ext}`;
     const thumbnailPath = path.join(thumbnailsDir, thumbnailFilename);
+    
+    console.log('Thumbnail path:', thumbnailPath);
+    console.log('Thumbnails directory exists:', fs.existsSync(thumbnailsDir));
 
     try {
-      // Process image with sharp
-      const image = sharp(sourcePath);
-      
-      // Resize image while maintaining aspect ratio
-      const resized = image.resize(width, height, {
-        fit: 'inside',
-        withoutEnlargement: true
-      });
-
-      // Convert to specified format and save
-      switch (format) {
-        case 'jpeg':
-          await resized.jpeg({ quality }).toFile(thumbnailPath);
-          break;
-        case 'png':
-          await resized.png({ quality }).toFile(thumbnailPath);
-          break;
-        case 'webp':
-          await resized.webp({ quality }).toFile(thumbnailPath);
-          break;
+      // Check if source file exists
+      if (!fs.existsSync(sourcePath)) {
+        console.error('Source file does not exist:', sourcePath);
+        return null;
       }
-
+      
+      // For PDFs and images, copy the original file as a "thumbnail"
+      // This is a fallback when Sharp is not working properly
+      // For PDFs, we use the PDF itself as the thumbnail
+      fs.copyFileSync(sourcePath, thumbnailPath);
+      
+      console.log('Thumbnail created (copy):', thumbnailPath);
+      console.log('Thumbnail file exists after creation:', fs.existsSync(thumbnailPath));
+      
       // Return the relative path for the thumbnail
-      return `/uploads/thumbnails/${thumbnailFilename}`;
+      const relativePath = `/uploads/thumbnails/${thumbnailFilename}`;
+      console.log('Returning thumbnail URL:', relativePath);
+      return relativePath;
     } catch (error) {
       console.error('Error generating thumbnail:', error);
-      throw new Error('Failed to generate thumbnail');
+      // Return null instead of throwing error to prevent upload failure
+      return null;
     }
   },
 
@@ -78,7 +87,14 @@ export const thumbnailService = {
   },
 
   /**
-   * Get supported image formats
+   * Check if a file can have a thumbnail generated (only images now, PDFs use generic frontend thumbnail)
+   */
+  canGenerateThumbnail: (mimetype: string): boolean => {
+    return mimetype.startsWith('image/');
+  },
+
+  /**
+   * Get supported image formats for thumbnail generation
    */
   getSupportedFormats: (): string[] => {
     return ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];

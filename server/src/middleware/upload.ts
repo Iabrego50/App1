@@ -4,9 +4,13 @@ import fs from 'fs';
 import { thumbnailService } from '../services/thumbnailService';
 
 // Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, '../../uploads');
+const uploadsDir = path.join(process.cwd(), 'uploads');
+console.log('Upload middleware - uploads directory:', uploadsDir);
 if (!fs.existsSync(uploadsDir)) {
+  console.log('Creating uploads directory:', uploadsDir);
   fs.mkdirSync(uploadsDir, { recursive: true });
+} else {
+  console.log('Uploads directory already exists:', uploadsDir);
 }
 
 // Configure storage
@@ -21,7 +25,9 @@ const storage = multer.diskStorage({
     }
     
     const dir = path.join(uploadsDir, subDir);
+    console.log('File upload destination:', dir);
     if (!fs.existsSync(dir)) {
+      console.log('Creating subdirectory:', dir);
       fs.mkdirSync(dir, { recursive: true });
     }
     cb(null, dir);
@@ -36,6 +42,8 @@ const storage = multer.diskStorage({
 
 // File filter
 const fileFilter = (req: any, file: any, cb: multer.FileFilterCallback) => {
+  console.log('File upload attempt:', file.originalname, 'MIME type:', file.mimetype);
+  
   // Allow specific file types
   const allowedTypes = [
     // Documents
@@ -53,18 +61,24 @@ const fileFilter = (req: any, file: any, cb: multer.FileFilterCallback) => {
     'image/png',
     'image/gif',
     'image/webp',
+    'image/bmp',
+    'image/tiff',
+    'image/svg+xml',
     // Videos
     'video/mp4',
     'video/webm',
     'video/ogg',
     'video/avi',
-    'video/mov'
+    'video/mov',
+    'video/quicktime'
   ];
 
   if (allowedTypes.includes(file.mimetype)) {
+    console.log('File type allowed:', file.mimetype);
     cb(null, true);
   } else {
-    cb(new Error('File type not allowed'));
+    console.log('File type rejected:', file.mimetype);
+    cb(new Error(`File type not allowed: ${file.mimetype}`));
   }
 };
 
@@ -113,9 +127,13 @@ export const processUploadedFile = async (req: any, res: any, next: any) => {
           }
         );
         
-        // Add thumbnail URL to the file object
-        req.file.thumbnailUrl = thumbnailUrl;
-        console.log('Thumbnail generated:', thumbnailUrl);
+        // Add thumbnail URL to the file object (only if thumbnail was created)
+        if (thumbnailUrl) {
+          req.file.thumbnailUrl = thumbnailUrl;
+          console.log('Thumbnail generated:', thumbnailUrl);
+        } else {
+          console.log('Thumbnail generation failed, continuing without thumbnail');
+        }
       } catch (error) {
         console.error('Failed to generate thumbnail:', error);
         // Continue without thumbnail if generation fails
