@@ -86,12 +86,30 @@ app.get('/api/health', (req, res) => {
 });
 
 // Serve static files from the React app build
-app.use(express.static(path.join(__dirname, '../../client/build')));
+const buildPath = path.join(__dirname, '../build');
+console.log('Build path:', buildPath);
 
-// Handle React routing, return all requests to React app
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../../client/build', 'index.html'));
-});
+// Check if build directory exists
+if (require('fs').existsSync(buildPath)) {
+  console.log('✅ React build directory found');
+  app.use(express.static(buildPath));
+
+  // Handle React routing, return all requests to React app
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(buildPath, 'index.html'));
+  });
+} else {
+  console.log('❌ React build directory not found at:', buildPath);
+  // Fallback for when build doesn't exist
+  app.get('/', (req, res) => {
+    res.json({ 
+      message: 'Server is running but React build not found',
+      buildPath: buildPath,
+      dirname: __dirname,
+      availablePaths: require('fs').readdirSync(__dirname + '/..')
+    });
+  });
+}
 
 // Initialize database and start server
 initializeDatabase()

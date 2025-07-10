@@ -144,3 +144,35 @@ This project is licensed under the MIT License.
 ## 🆘 Support
 
 If you encounter any issues or have questions, please open an issue on GitHub. 
+
+**Your deployed app is available at:**
+```
+https://backvault-production.up.railway.app
+```
+
+### To access your app:
+
+1. **Click on the URL** or copy and paste it into your browser
+2. **Or click the "Update" button** to make sure the domain is active
+
+### What you should see:
+
+- Your React app should load in the browser
+- You can register/login and use all the features
+- The app will be accessible to anyone with the URL
+
+### Test your app:
+
+1. **Open the URL in a new browser tab**
+2. **Try registering a new account**
+3. **Test the main features** (projects, uploads, etc.)
+
+### If the app doesn't load:
+
+- Make sure the deployment completed successfully
+- Check if there are any error messages in the Deploy Logs
+- The app might take a minute to fully start up
+
+**Your app is now live and publicly accessible!** 🚀
+
+Let me know if the app loads correctly or if you encounter any issues! 
